@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GMB Scraper</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Maps Scraper</h1>
+            <div class="badge">PRO</div>
+        </header>
+
+        <div class="input-group">
+            <label for="query">Search Query</label>
+            <input type="text" id="query" placeholder="e.g. Coffee Shops" />
+        </div>
+
+        <div class="input-group">
+            <label for="location">Location</label>
+            <input type="text" id="location" placeholder="e.g. San Francisco, CA" />
+        </div>
+
+        <button id="startBtn" class="primary-btn">
+            <span class="btn-text">Start Scraping</span>
+            <div class="btn-glow"></div>
+        </button>
+
+        <div id="status-card" class="glass-card hidden">
+            <div class="status-header">
+                <span class="status-label">Status</span>
+                <span id="statusText" class="status-value">Idle</span>
+            </div>
+            
+            <div class="progress-track">
+                <div id="progressBar" class="progress-fill"></div>
+            </div>
+            
+            <div class="stats-row">
+                <div class="stat-item">
+                    <span class="stat-label">Scraped</span>
+                    <span id="countValue" class="stat-val">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Target</span>
+                    <span class="stat-val">1000</span>
+                </div>
+            </div>
+        </div>
+
+        <button id="downloadBtn" class="secondary-btn hidden">
+            Download Excel
+        </button>
+
+        <div id="error-msg" class="error-toast hidden"></div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>

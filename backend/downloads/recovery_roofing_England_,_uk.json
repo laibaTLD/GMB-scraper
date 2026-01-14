@@ -1,0 +1,43 @@
+{
+  "query": "roofing",
+  "location": "England , uk",
+  "scraped_count": 2,
+  "results": [
+    {
+      "files_url": "https://www.google.com/maps/place/England+Roofing+Contractors+Ltd/data=!4m7!3m6!1s0x486b3caeff4cf34d:0xb48795744e0f7d16!8m2!3d50.170272!4d-5.114386!16s%2Fg%2F1tcw30hg!19sChIJTfNM_648a0gRFn0PTnSVh7Q?authuser=0&hl=en&rclk=1",
+      "name": "England Roofing Contractors Ltd",
+      "rating": "",
+      "reviews": "\ue8b6",
+      "category": "Roofing contractor",
+      "address": "Pentire Rd, Penryn TR10 8QX, United Kingdom",
+      "phone": "+44 1326 617477",
+      "website": "http://www.englandroofingcontractors.co.uk/",
+      "hours": "N/A",
+      "email": "info@englandroofingcontractors.co.uk",
+      "facebook": "N/A",
+      "instagram": "N/A",
+      "twitter": "N/A",
+      "linkedin": "N/A",
+      "youtube": "N/A",
+      "tiktok": "N/A"
+    },
+    {
+      "files_url": "https://www.google.com/maps/place/Check+A+Drip+Roofing/data=!4m7!3m6!1s0x47d871702f20a179:0x285c2846fa05a1d!8m2!3d51.3658694!4d-0.1401132!16s%2Fg%2F11pxs7c55k!19sChIJeaEgL3Bx2EcRHVqgb4TChQI?authuser=0&hl=en&rclk=1",
+      "name": "Check A Drip Roofing",
+      "rating": "",
+      "reviews": "\ue8b6",
+      "category": "Roofing contractor",
+      "address": "164 Demesne Rd, Wallington SM6 8EN, United Kingdom",
+      "phone": "+44 20 3519 3564",
+      "website": "http://checkadriproofers.co.uk/",
+      "hours": "N/A",
+      "email": "info@checkadriproofers.co.uk",
+      "facebook": "N/A",
+      "instagram": "N/A",
+      "twitter": "N/A",
+      "linkedin": "N/A",
+      "youtube": "N/A",
+      "tiktok": "N/A"
+    }
+  ]
+}

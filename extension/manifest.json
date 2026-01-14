@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Google Maps Data Scraper",
+  "version": "1.0",
+  "description": "Scrape business data from Google Maps and export to Excel",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:5000/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+      "48": "icon.png"
+  }
+}
