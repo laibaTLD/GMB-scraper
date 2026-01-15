@@ -47,8 +47,14 @@ class MapsScraper:
         self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
     def start_scraping(self, query, location, limit=TARGET_COUNT):
+        # Check if actually running by checking thread state
         if self.is_scraping:
-            return False, "Scraping already in progress"
+            # Double-check: if we have results but no active thread, reset state
+            if hasattr(self, '_scrape_thread') and not self._scrape_thread.is_alive():
+                self.is_scraping = False
+                self.status_message = "Idle"
+            else:
+                return False, "Scraping already in progress"
         
         self.stop_event.clear()
         self.is_scraping = True
@@ -57,8 +63,8 @@ class MapsScraper:
         self.target_count = limit
         self.status_message = "Starting..."
         
-        thread = threading.Thread(target=self._scrape_logic, args=(query, location))
-        thread.start()
+        self._scrape_thread = threading.Thread(target=self._scrape_logic, args=(query, location))
+        self._scrape_thread.start()
         return True, "Scraping started"
 
     def stop_scraping(self):
@@ -92,7 +98,7 @@ class MapsScraper:
             self.processed_urls = set()
 
         consecutive_scrolls_without_new = 0
-        MAX_SCROLL_RETRIES = 20  # How many scrolls to try before giving up if no new items appear
+        MAX_SCROLL_RETRIES = 30  # How many scrolls to try before giving up if no new items appear
         
         while self.scraped_count < self.target_count and not self.stop_event.is_set():
             
@@ -125,18 +131,43 @@ class MapsScraper:
 
             # --- PHASE 2: Collection & Extraction ---
             try:
-                # Find visible links
-                links = self.driver.find_elements(By.CSS_SELECTOR, 'a[href*="/maps/place/"]')
+                # Find visible links - try multiple selectors to catch more businesses
+                links = []
+                selectors = [
+                    'a[href*="/maps/place/"]',
+                    'div[role="feed"] a[href*="/maps/place/"]',
+                    'a[href*="/maps/place/"][data-value]',
+                    'div[jsaction*="click:place"] a'
+                ]
+                
+                for selector in selectors:
+                    try:
+                        found_links = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                        if found_links:
+                            links.extend(found_links)
+                            break
+                    except:
+                        continue
+                
+                # Remove duplicates by converting to set and back to list
+                unique_links = []
+                seen_urls = set()
+                for link in links:
+                    url = link.get_attribute('href')
+                    if url and url not in seen_urls:
+                        unique_links.append(link)
+                        seen_urls.add(url)
                 
                 # Identify NEW links only
                 batch_new_urls = []
-                for link in links:
+                for link in unique_links:
                     url = link.get_attribute('href')
                     if url and url not in self.processed_urls:
                         batch_new_urls.append(url)
                 
                 if batch_new_urls:
                     consecutive_scrolls_without_new = 0 # Reset counter
+                    self.status_message = f"Found {len(batch_new_urls)} new businesses to extract..."
                     
                     # Process this batch
                     for url in batch_new_urls:
@@ -229,30 +260,67 @@ class MapsScraper:
                 else:
                     # No new URLs found in this view, SCROLL DOWN
                     consecutive_scrolls_without_new += 1
-                    self.status_message = f"Scrolling... ({consecutive_scrolls_without_new}/{MAX_SCROLL_RETRIES})"
+                    self.status_message = f"Scrolling... ({consecutive_scrolls_without_new}/{MAX_SCROLL_RETRIES}) - Found {self.scraped_count}/{self.target_count} so far"
                     
                     try:
-                        # Feed is often role='feed'
-                        feed_div = self.driver.find_element(By.CSS_SELECTOR, "div[role='feed']")
-                        self.driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", feed_div)
+                        # Try multiple scroll methods to ensure we get new content
+                        scroll_methods = [
+                            # Method 1: Scroll the feed div
+                            lambda: self.driver.execute_script("""
+                                var feed = document.querySelector('div[role="feed"]');
+                                if (feed) feed.scrollTop = feed.scrollHeight;
+                            """),
+                            # Method 2: Scroll entire page
+                            lambda: self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight)"),
+                            # Method 3: Use PAGE_DOWN keys
+                            lambda: webdriver.ActionChains(self.driver).send_keys(Keys.PAGE_DOWN).perform(),
+                            # Method 4: Multiple small scrolls
+                            lambda: self.driver.execute_script("window.scrollBy(0, 500)")
+                        ]
+                        
+                        for method in scroll_methods:
+                            try:
+                                method()
+                                time.sleep(0.5)  # Small delay between scroll attempts
+                            except:
+                                continue
+                                
+                    except Exception as e:
+                        print(f"Scroll error: {e}")
+
+                    # Wait for new content to load
+                    time.sleep(SCROLL_PAUSE_TIME)
+                    
+                    # Check if we've actually scrolled by checking page height change
+                    try:
+                        current_height = self.driver.execute_script("return document.body.scrollHeight")
+                        if not hasattr(self, 'last_page_height'):
+                            self.last_page_height = current_height
+                        
+                        if current_height == self.last_page_height and consecutive_scrolls_without_new > 5:
+                            # Page height hasn't changed for several scrolls, try more aggressive scrolling
+                            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight + 1000)")
+                        
+                        self.last_page_height = current_height
                     except:
-                        # Fallback: try raw body scroll or key presses if div not found
-                        try:
-                             actions = webdriver.ActionChains(self.driver)
-                             actions.send_keys(Keys.PAGE_DOWN).perform()
-                        except:
-                            pass
+                        pass
 
                     # End of list check
-                    if "You've reached the end of the list" in self.driver.page_source:
+                    page_source = self.driver.page_source
+                    end_indicators = [
+                        "You've reached the end of the list",
+                        "You've reached the end",
+                        "No more results",
+                        "End of results"
+                    ]
+                    
+                    if any(indicator in page_source for indicator in end_indicators):
                          self.status_message = "End of list reached."
                          break
                          
                     if consecutive_scrolls_without_new >= MAX_SCROLL_RETRIES:
-                        self.status_message = "No new items found for too long. Stopping."
+                        self.status_message = f"No new items found for too long. Stopping at {self.scraped_count}/{self.target_count}."
                         break
-                        
-                    time.sleep(SCROLL_PAUSE_TIME)
             
             except Exception as e:
                 # If main loop crashes (e.g. browser closed manually), try to recover
@@ -278,6 +346,9 @@ class MapsScraper:
                    pass
             
             self.status_message = "Complete!"
+        
+        # Reset scraping state
+        self.is_scraping = False
     
     def get_progress(self):
         return {

@@ -10,6 +10,17 @@ CORS(app)
 def health_check():
     return jsonify({"status": "running", "message": "GMB Scraper API is active"}), 200
 
+@app.route('/reset-scraper', methods=['POST'])
+def reset_scraper():
+    scraper_instance.stop_scraping()
+    scraper_instance.is_scraping = False
+    scraper_instance.status_message = "Idle"
+    scraper_instance.results = []
+    scraper_instance.scraped_count = 0
+    scraper_instance.target_count = 0
+    scraper_instance.output_file = None
+    return jsonify({"message": "Scraper reset successfully"}), 200
+
 @app.route('/start-scraping', methods=['POST'])
 def start_scraping():
     data = request.json
