@@ -10,7 +10,7 @@ CORS(app)
 
 @app.route('/', methods=['GET'])
 def health_check():
-    return jsonify({"status": "running", "message": "GMB Scraper API is active"}), 200
+    return jsonify({"status": "running", "message": "Lead Engine API is active"}), 200
 
 @app.route('/reset-scraper', methods=['POST'])
 def reset_scraper():
@@ -81,5 +81,5 @@ def download_file():
     )
 
 if __name__ == '__main__':
-    print(f"Starting GMB Scraper API on port {API_PORT}...")
+    print(f"Starting Lead Engine API on port {API_PORT}...")
     app.run(host=API_HOST, port=API_PORT)

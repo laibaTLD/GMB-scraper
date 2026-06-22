@@ -1,18 +1,31 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Search,
   MapPin,
   Download,
   Play,
   Loader2,
-  Database,
-  Globe,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Zap,
+  Layers,
+  Mail,
+  Globe,
+  Target,
+  TrendingUp,
+  Square,
 } from 'lucide-react';
 
-// API Base URL — override with VITE_API_URL in .env.local
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+const STATUS_CHIPS = [
+  { key: 'idle', label: 'Ready' },
+  { key: 'scraping', label: 'Scraping' },
+  { key: 'completed', label: 'Completed' },
+  { key: 'error', label: 'Error' },
+];
+
+const hasValue = (v) => v && v !== 'N/A';
 
 function App() {
   const [query, setQuery] = useState('');
@@ -20,19 +33,33 @@ function App() {
   const [limit, setLimit] = useState(1000);
   const [scrapingMode, setScrapingMode] = useState('detailed');
   const [isScraping, setIsScraping] = useState(false);
-  const [status, setStatus] = useState('idle'); // idle, scraping, completed, error
-  const [message, setMessage] = useState('');
+  const [status, setStatus] = useState('idle');
   const [results, setResults] = useState([]);
+  const [allResults, setAllResults] = useState([]);
   const [progress, setProgress] = useState({ count: 0, target: 0, status: '', is_active: false, download_ready: false });
   const [error, setError] = useState(null);
   const pollingRef = useRef(null);
 
-  // Poll for progress when scraping
+  const isActive = status === 'scraping';
+  const progressPercent = progress.target > 0
+    ? Math.min(100, Math.round((progress.count / progress.target) * 100))
+    : 0;
+
+  const stats = useMemo(() => {
+    const emails = allResults.filter((r) => hasValue(r.email)).length;
+    const websites = allResults.filter((r) => hasValue(r.website)).length;
+    const records = progress.count ?? 0;
+    const successRate = progress.target > 0
+      ? Math.round((records / progress.target) * 100)
+      : 0;
+    return { records, emails, websites, successRate };
+  }, [allResults, progress.count, progress.target]);
+
   useEffect(() => {
     if (isScraping) {
       pollingRef.current = setInterval(itemsFetcher, 2000);
-    } else {
-      if (pollingRef.current) clearInterval(pollingRef.current);
+    } else if (pollingRef.current) {
+      clearInterval(pollingRef.current);
     }
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
@@ -41,25 +68,23 @@ function App() {
 
   const itemsFetcher = async () => {
     try {
-      // Fetch Progress
       const progressRes = await fetch(`${API_URL}/progress`);
       if (!progressRes.ok) throw new Error(`Progress API Error: ${progressRes.status}`);
       const progressData = await progressRes.json();
       setProgress(progressData);
 
-      // Fetch Results Preview
-      const resultsRes = await fetch(`${API_URL}/results?limit=50`);
+      const resultsRes = await fetch(`${API_URL}/results?limit=1000`);
       if (!resultsRes.ok) throw new Error(`Results API Error: ${resultsRes.status}`);
       const resultsData = await resultsRes.json();
       if (Array.isArray(resultsData)) {
-        setResults(resultsData);
+        setAllResults(resultsData);
+        setResults(resultsData.slice(0, 50));
       }
 
       if (!progressData.is_active) {
         if (progressData.download_ready) {
           setIsScraping(false);
           setStatus('completed');
-          setMessage(progressData.status || 'Scraping complete.');
         } else if (progressData.status?.includes('Error')) {
           setIsScraping(false);
           setStatus('error');
@@ -73,19 +98,16 @@ function App() {
         ) {
           setIsScraping(false);
           setStatus('idle');
-          setMessage(progressData.status);
         }
       }
-
     } catch (err) {
-      // Silent console log for polling errors to avoid spamming user UI
-      console.warn("Polling error:", err.message);
+      console.warn('Polling error:', err.message);
     }
   };
 
   const startScraping = async () => {
     if (!query.trim()) {
-      setError("Please provide a business query.");
+      setError('Please provide a business query.');
       return;
     }
 
@@ -93,6 +115,7 @@ function App() {
     setIsScraping(true);
     setStatus('scraping');
     setResults([]);
+    setAllResults([]);
 
     try {
       const response = await fetch(`${API_URL}/start-scraping`, {
@@ -106,18 +129,15 @@ function App() {
         }),
       });
 
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.indexOf("application/json") === -1) {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.indexOf('application/json') === -1) {
         const text = await response.text();
         throw new Error(`Server returned non-JSON response: ${text.slice(0, 100)}...`);
       }
 
       const data = await response.json();
-
-      if (response.ok) {
-        setMessage(data.message);
-      } else {
-        throw new Error(data.error || "Failed to start scraping");
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to start scraping');
       }
     } catch (err) {
       setError(err.message);
@@ -128,16 +148,13 @@ function App() {
 
   const stopScraping = async () => {
     try {
-      const response = await fetch(`${API_URL}/stop-scraping`, {
-        method: 'POST',
-      });
+      const response = await fetch(`${API_URL}/stop-scraping`, { method: 'POST' });
       if (response.ok) {
         setStatus('idle');
         setIsScraping(false);
-        setMessage('Scraping stopped by user.');
       }
     } catch (err) {
-      console.error("Stop error", err);
+      console.error('Stop error', err);
     }
   };
 
@@ -163,258 +180,268 @@ function App() {
     }
   };
 
+  const chipClass = (key) => {
+    if (status !== key) return 'status-chip';
+    if (key === 'scraping') return 'status-chip status-chip-scraping';
+    if (key === 'completed') return 'status-chip status-chip-completed';
+    if (key === 'error') return 'status-chip status-chip-error';
+    return 'status-chip status-chip-active';
+  };
+
+  const statusMessage = progress.status || (isScraping ? 'Initializing…' : 'Ready to scrape');
+
   return (
-    <div className="min-h-screen p-4 md:p-8 flex flex-col items-center" style={{ backgroundColor: 'var(--bg-dark)' }}>
-
-      {/* Header */}
-      <header className="w-full max-w-6xl mb-12 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-3 rounded-xl border" style={{ backgroundColor: 'var(--primary)20', borderColor: 'var(--primary)50' }}>
-            <Globe className="w-8 h-8" style={{ color: 'var(--primary)' }} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold" style={{ color: 'var(--text-light)' }}>
-              GMB Scraper
-            </h1>
-            <p className="text-sm" style={{ color: 'var(--text-medium)' }}>Business Data Intelligence</p>
-          </div>
-        </div>
-
-        <div className="hidden md:flex items-center gap-4">
-          <div className={`flex items-center gap-2 px-4 py-2 rounded-full border ${status === 'scraping' ? '' :
-            status === 'completed' ? '' :
-              ''
-            }`} style={{
-              backgroundColor: status === 'scraping' ? 'var(--primary)20' : status === 'completed' ? 'var(--primary)20' : 'var(--card-dark)',
-              borderColor: status === 'scraping' ? 'var(--primary)50' : status === 'completed' ? 'var(--primary)50' : 'var(--text-medium)30'
-            }}>
-            <div className={`w-2 h-2 rounded-full ${status === 'scraping' ? 'animate-pulse' : ''}`} style={{
-              backgroundColor: status === 'scraping' ? 'var(--primary)' : status === 'completed' ? 'var(--primary)' : 'var(--text-medium)'
-            }} />
-            <span className="text-sm font-medium capitalize" style={{ color: status === 'scraping' ? 'var(--primary)' : status === 'completed' ? 'var(--primary)' : 'var(--text-medium)' }}>{status === 'idle' ? 'Ready' : status}</span>
-          </div>
+    <div className="dashboard">
+      {/* Header — 52px */}
+      <header className="dashboard-header">
+        <img src="/logo.png" alt="Lead Engine" className="h-9 w-auto object-contain" />
+        <div className="flex items-center gap-1.5" role="status" aria-live="polite">
+          {STATUS_CHIPS.map(({ key, label }) => (
+            <span key={key} className={chipClass(key)}>
+              {key === 'scraping' && status === 'scraping' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+              )}
+              {label}
+            </span>
+          ))}
         </div>
       </header>
 
-      <main className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-8" style={{ color: 'var(--text-light)' }}>
+      {/* Main — 30 / 70 grid, fills remaining viewport */}
+      <main className="dashboard-main">
 
-        {/* Left Col: Controls */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="glass-card p-6 space-y-6">
-            <h2 className="text-xl font-semibold flex items-center gap-2" style={{ color: 'var(--text-light)' }}>
-              <Search className="w-5 h-5" style={{ color: 'var(--primary)' }} />
+        {/* Left — compact control panel */}
+        <aside className="flex flex-col gap-3 min-h-0">
+          <div className="surface-card card-compact flex-1 min-h-0">
+            <h2 className="section-heading">
+              <Target className="w-3.5 h-3.5 text-[var(--primary)]" />
               Target Parameters
             </h2>
 
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium ml-1" style={{ color: 'var(--text-medium)' }}>Business Query</label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-medium)' }} />
+            <div className="flex flex-col flex-1 justify-evenly gap-4">
+            <div className="grid gap-4">
+              <div>
+                <label htmlFor="query" className="field-label">Business Query</label>
+                <div className="input-wrap">
+                  <Search className="input-wrap-icon" />
                   <input
+                    id="query"
                     type="text"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="e.g. Plumbers, Restaurants..."
-                    className="glass-input w-full pl-10"
+                    placeholder="Plumbers, Restaurants…"
+                    className="input-compact"
+                    disabled={isScraping}
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium ml-1" style={{ color: 'var(--text-medium)' }}>Location (optional)</label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-medium)' }} />
+              <div>
+                <label htmlFor="location" className="field-label">Location</label>
+                <div className="input-wrap">
+                  <MapPin className="input-wrap-icon" />
                   <input
+                    id="location"
                     type="text"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    placeholder="e.g. New York, London..."
-                    className="glass-input w-full pl-10"
+                    placeholder="New York, London…"
+                    className="input-compact"
+                    disabled={isScraping}
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium ml-1" style={{ color: 'var(--text-medium)' }}>Max Leads (20-1000)</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-xs" style={{ color: 'var(--text-medium)' }}>#</span>
+              <div>
+                <label htmlFor="limit" className="field-label">Max Leads</label>
+                <div className="input-wrap">
+                  <span className="input-wrap-icon text-[10px] font-mono">#</span>
                   <input
+                    id="limit"
                     type="number"
                     min="20"
                     max="1000"
                     value={limit}
                     onChange={(e) => setLimit(Number(e.target.value))}
-                    className="glass-input w-full pl-10"
+                    className="input-compact"
+                    disabled={isScraping}
+                    aria-describedby="limit-hint"
                   />
                 </div>
+                <span id="limit-hint" className="sr-only">Between 20 and 1000</span>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium ml-1" style={{ color: 'var(--text-medium)' }}>Scraping Mode</label>
-              <div className="space-y-2 ml-1">
-                <label className="flex items-center gap-3 cursor-pointer" style={{ color: 'var(--text-light)' }}>
-                  <input
-                    type="radio"
-                    name="scrapingMode"
-                    value="simple"
-                    checked={scrapingMode === 'simple'}
-                    onChange={(e) => setScrapingMode(e.target.value)}
-                    disabled={isScraping}
-                    className="accent-[var(--primary)]"
-                  />
-                  <span className="text-sm">Simple Scraping</span>
-                </label>
-                <label className="flex items-center gap-3 cursor-pointer" style={{ color: 'var(--text-light)' }}>
-                  <input
-                    type="radio"
-                    name="scrapingMode"
-                    value="detailed"
-                    checked={scrapingMode === 'detailed'}
-                    onChange={(e) => setScrapingMode(e.target.value)}
-                    disabled={isScraping}
-                    className="accent-[var(--primary)]"
-                  />
-                  <span className="text-sm">Detailed Scraping</span>
-                </label>
+            <div>
+              <span className="field-label">Scraping Mode</span>
+              <div className="segmented-toggle" role="radiogroup" aria-label="Scraping mode">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={scrapingMode === 'simple'}
+                  disabled={isScraping}
+                  onClick={() => setScrapingMode('simple')}
+                  className={`segment-btn ${scrapingMode === 'simple' ? 'segment-btn-active' : ''}`}
+                >
+                  <Zap className="w-3 h-3" />
+                  Simple
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={scrapingMode === 'detailed'}
+                  disabled={isScraping}
+                  onClick={() => setScrapingMode('detailed')}
+                  className={`segment-btn ${scrapingMode === 'detailed' ? 'segment-btn-active' : ''}`}
+                >
+                  <Layers className="w-3 h-3" />
+                  Detailed
+                </button>
               </div>
             </div>
 
             {error && (
-              <div className="p-4 rounded-xl text-sm flex items-start gap-2" style={{ backgroundColor: 'var(--primary)20', border: '1px solid var(--primary)30', color: 'var(--primary)' }}>
-                <AlertCircle className="w-5 h-5 shrink-0" />
+              <div className="alert-compact" role="alert">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
                 <p>{error}</p>
               </div>
             )}
 
             <button
-              onClick={status === 'scraping' ? stopScraping : startScraping}
-              disabled={isScraping && status !== 'scraping'}
-              className={`w-full btn-primary ${status === 'scraping'
-                ? ''
-                : isScraping
-                  ? 'opacity-80'
-                  : ''
-                }`}
-              style={{
-                background: status === 'scraping' ? 'var(--primary)' : 'linear-gradient(135deg, var(--primary), var(--accent))',
-                boxShadow: status === 'scraping' ? '0 10px 40px -10px var(--primary)40' : '0 10px 40px -10px var(--primary)40'
-              }}
+              onClick={isActive ? stopScraping : startScraping}
+              disabled={isScraping && !isActive}
+              className="btn-primary"
             >
-              {status === 'scraping' ? (
+              {isActive ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Square className="w-3.5 h-3.5 fill-current" />
                   Stop Scraping
                 </>
               ) : isScraping ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Starting...
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Starting…
                 </>
               ) : (
                 <>
-                  <Play className="w-5 h-5 fill-current" />
+                  <Play className="w-3.5 h-3.5 fill-current" />
                   Start Scraping
                 </>
               )}
             </button>
-          </div>
-
-          {/* Download Card */}
-          <div className="glass-card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold" style={{ color: 'var(--text-light)' }}>Export Data</h3>
-              <Database className="w-5 h-5" style={{ color: 'var(--accent)' }} />
             </div>
-            <p className="text-sm mb-6" style={{ color: 'var(--text-medium)' }}>
-              Download the scraped data as Excel. The file is generated on demand and not stored on the server.
-            </p>
-            <button
-              onClick={handleDownload}
-              disabled={!progress.download_ready}
-              className="w-full btn-secondary group disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Download className="w-5 h-5 group-hover:text-blue-400 transition-colors" style={{ color: 'var(--text-light)' }} />
-              Download Excel
-            </button>
-          </div>
-        </div>
 
-        {/* Right Col: Live Results */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Progress Bar (Visible when scraping or having data) */}
-          {
-            (isScraping || results.length > 0) && (
-              <div className="glass-card p-6 border-l-4" style={{ borderLeftColor: 'var(--primary)' }}>
-                <div className="flex justify-between items-end mb-2">
-                  <div>
-                    <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--primary)' }}>Status Console</span>
-                    <p className="mt-1" style={{ color: 'var(--text-light)' }}>
-                      {progress.status || (isScraping ? "Initializing scraper engine..." : "Ready")}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold font-mono" style={{ color: 'var(--text-light)' }}>
-                      {progress.count ?? 0}
-                      {progress.target > 0 && (
-                        <span className="text-base font-normal" style={{ color: 'var(--text-medium)' }}> / {progress.target}</span>
-                      )}
-                    </div>
-                    <div className="text-xs" style={{ color: 'var(--text-medium)' }}>records found</div>
-                  </div>
-                </div>
+            <div className="divider" />
+
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[12px] font-medium text-[var(--text)]">Export Data</p>
+                <p className="text-[10px] text-[var(--text-muted)] truncate">Excel · on demand</p>
               </div>
-            )
-          }
+              <button
+                onClick={handleDownload}
+                disabled={!progress.download_ready}
+                className="btn-ghost shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download
+              </button>
+            </div>
+          </div>
+        </aside>
 
-          {/* Results Table */}
-          <div className="glass-card overflow-hidden flex flex-col h-[600px]">
-            <div className="p-4 border-b flex justify-between items-center" style={{ backgroundColor: 'var(--card-dark)80', borderColor: 'var(--text-medium)20' }}>
-              <h3 className="font-semibold flex items-center gap-2" style={{ color: 'var(--text-light)' }}>
-                <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--primary)' }} />
+        {/* Right — status + stats + CRM table */}
+        <section className="flex flex-col gap-2.5 min-h-0 min-w-0">
+
+          {/* Slim status banner — 40px */}
+          <div className="status-banner">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--primary)] shrink-0">
+              Status
+            </span>
+            <p className="text-[12px] text-[var(--text)] truncate flex-1 min-w-0" title={statusMessage}>
+              {statusMessage}
+            </p>
+            {progress.target > 0 && (
+              <>
+                <span className="text-[11px] tabular-nums text-[var(--text-muted)] shrink-0">
+                  {progress.count}/{progress.target}
+                </span>
+                <div className="progress-slim max-w-[120px]">
+                  <div className="progress-slim-fill" style={{ width: `${progressPercent}%` }} />
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Live stats row */}
+          <div className="grid grid-cols-4 gap-2 shrink-0">
+            {[
+              { label: 'Records Found', value: stats.records, icon: Target },
+              { label: 'Emails Found', value: stats.emails, icon: Mail },
+              { label: 'Websites Found', value: stats.websites, icon: Globe },
+              { label: 'Success Rate', value: `${stats.successRate}%`, icon: TrendingUp },
+            ].map(({ label, value, icon: Icon }) => (
+              <div key={label} className="stat-cell">
+                <div className="flex items-center gap-1">
+                  <Icon className="w-3 h-3 text-[var(--text-muted)]" />
+                  <span className="stat-label">{label}</span>
+                </div>
+                <div className="stat-value">{value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* CRM results table — fills remaining height */}
+          <div className="surface-card flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div
+              className="flex items-center justify-between px-3 shrink-0"
+              style={{ height: 36, borderBottom: '1px solid var(--border)' }}
+            >
+              <h3 className="section-heading">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[var(--primary)]" />
                 Live Results
               </h3>
-              <span className="text-xs px-2 py-1 rounded" style={{ color: 'var(--text-medium)', backgroundColor: 'var(--card-dark)' }}>
-                Showing latest 50
+              <span className="text-[10px] px-2 py-0.5 rounded-md text-[var(--text-muted)] bg-[var(--surface-elevated)]">
+                Latest 50
               </span>
             </div>
 
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 min-h-0 overflow-auto">
               {results.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-4" style={{ color: 'var(--text-medium)' }}>
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--card-dark)50' }}>
-                    <Search className="w-8 h-8" style={{ opacity: 0.2 }} />
-                  </div>
-                  <p>No results yet. Start a search to see data flow in.</p>
+                <div className="h-full flex flex-col items-center justify-center gap-2 text-[var(--text-muted)]">
+                  <Search className="w-6 h-6 opacity-20" />
+                  <p className="text-[12px]">No results yet — configure and start scraping.</p>
                 </div>
               ) : (
-                <table className="w-full text-left border-collapse">
-                  <thead className="sticky top-0 backdrop-blur-md z-10" style={{ backgroundColor: 'var(--card-dark)80' }}>
+                <table className="crm-table w-full">
+                  <thead className="sticky top-0 z-10">
                     <tr>
-                      <th className="p-4 text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-medium)' }}>Business Name</th>
-                      <th className="p-4 text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-medium)' }}>Rating</th>
-                      <th className="p-4 text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-medium)' }}>Phone</th>
-                      <th className="p-4 text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-medium)' }}>Address</th>
+                      <th>Business</th>
+                      <th>Rating</th>
+                      <th>Phone</th>
+                      <th>Email</th>
+                      <th>Address</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y" style={{ borderColor: 'var(--text-medium)20' }}>
+                  <tbody>
                     {results.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-slate-700/20 transition-colors" style={{ color: 'var(--text-light)' }}>
-                        <td className="p-4 font-medium" style={{ color: 'var(--text-light)' }}>{row.name || 'N/A'}</td>
-                        <td className="p-4">
-                          {row.rating ? (
-                            <span className="flex items-center gap-1 text-sm" style={{ color: 'var(--primary)' }}>
-                              ★ <span style={{ color: 'var(--text-light)' }}>{row.rating}</span>
-                              <span className="text-xs" style={{ color: 'var(--text-medium)' }}>({row.reviews})</span>
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--text-medium)' }}>-</span>
-                          )}
+                      <tr key={idx}>
+                        <td className="font-medium text-[var(--text)] max-w-[160px] truncate" title={row.name}>
+                          {row.name || '—'}
                         </td>
-                        <td className="p-4 font-mono text-sm" style={{ color: 'var(--text-medium)' }}>{row.phone || '-'}</td>
-                        <td className="p-4 text-sm truncate max-w-[200px]" style={{ color: 'var(--text-medium)' }} title={row.address}>
-                          {row.address || '-'}
+                        <td className="whitespace-nowrap text-[var(--text-muted)]">
+                          {hasValue(row.rating) ? (
+                            <span className="text-[var(--primary)]">★ {row.rating}</span>
+                          ) : '—'}
+                        </td>
+                        <td className="font-mono text-[11px] text-[var(--text-muted)] whitespace-nowrap">
+                          {hasValue(row.phone) ? row.phone : '—'}
+                        </td>
+                        <td className="text-[11px] text-[var(--text-muted)] max-w-[140px] truncate" title={row.email}>
+                          {hasValue(row.email) ? row.email : '—'}
+                        </td>
+                        <td className="text-[var(--text-muted)] max-w-[180px] truncate" title={row.address}>
+                          {hasValue(row.address) ? row.address : '—'}
                         </td>
                       </tr>
                     ))}
@@ -423,7 +450,7 @@ function App() {
               )}
             </div>
           </div>
-        </div>
+        </section>
       </main>
     </div>
   );
