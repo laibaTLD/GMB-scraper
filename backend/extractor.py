@@ -1,4 +1,5 @@
 import re
+import requests
 from bs4 import BeautifulSoup
 
 def clean_text(text):
@@ -68,7 +69,7 @@ def extract_socials(soup):
     
     return socials
 
-def parse_business_data(html, url):
+def parse_business_data(html, url, maps_only=False):
     soup = BeautifulSoup(html, 'html.parser')
     text_content = soup.get_text(" ", strip=True) # Full text for regex search
     
@@ -138,16 +139,55 @@ def parse_business_data(html, url):
         if hours_div:
              data['hours'] = hours_div.get('aria-label')
 
-        # Email & Socials - fallback email extraction from text content
-        if data['email'] == "N/A":
-            found_email = extract_email(text_content)
-            if found_email:
-                data['email'] = found_email
-            
-        found_socials = extract_socials(soup)
-        data.update(found_socials) # Merge found socials into data dict
+        if not maps_only:
+            # Email & Socials - fallback email extraction from text content
+            if data['email'] == "N/A":
+                found_email = extract_email(text_content)
+                if found_email:
+                    data['email'] = found_email
+
+            found_socials = extract_socials(soup)
+            data.update(found_socials)
 
     except Exception as e:
         print(f"Error parsing HTML: {e}")
+
+    return data
+
+
+def enrich_from_website(data, user_agent, timeout=5):
+    """Fetch business website over HTTP (much faster than Selenium)."""
+    website = data.get('website')
+    if not website or website == "N/A":
+        return data
+
+    social_keys = ['facebook', 'instagram', 'twitter', 'linkedin', 'youtube', 'tiktok']
+    needs_email = data.get('email') == "N/A"
+    needs_socials = any(data.get(k) == "N/A" for k in social_keys)
+    if not needs_email and not needs_socials:
+        return data
+
+    try:
+        resp = requests.get(
+            website,
+            headers={'User-Agent': user_agent},
+            timeout=timeout,
+            allow_redirects=True,
+        )
+        if resp.status_code >= 400:
+            return data
+
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        if needs_email:
+            website_email = extract_email_from_website(soup)
+            if website_email:
+                data['email'] = website_email
+
+        website_socials = extract_socials(soup)
+        for key, value in website_socials.items():
+            if data.get(key) == "N/A" and value:
+                data[key] = value
+    except Exception:
+        pass
 
     return data

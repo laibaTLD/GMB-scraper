@@ -11,18 +11,19 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-// API Base URL (adjust if running elsewhere, currently localhost:5001)
-const API_URL = 'http://localhost:5001';
+// API Base URL — override with VITE_API_URL in .env.local
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 function App() {
   const [query, setQuery] = useState('');
   const [location, setLocation] = useState('');
   const [limit, setLimit] = useState(1000);
+  const [scrapingMode, setScrapingMode] = useState('detailed');
   const [isScraping, setIsScraping] = useState(false);
   const [status, setStatus] = useState('idle'); // idle, scraping, completed, error
   const [message, setMessage] = useState('');
   const [results, setResults] = useState([]);
-  const [progress, setProgress] = useState({ total: 0, current: 0, status: '' });
+  const [progress, setProgress] = useState({ count: 0, target: 0, status: '', is_active: false, download_ready: false });
   const [error, setError] = useState(null);
   const pollingRef = useRef(null);
 
@@ -47,18 +48,34 @@ function App() {
       setProgress(progressData);
 
       // Fetch Results Preview
-      const resultsRes = await fetch(`${API_URL}/results?limit=10`);
+      const resultsRes = await fetch(`${API_URL}/results?limit=50`);
       if (!resultsRes.ok) throw new Error(`Results API Error: ${resultsRes.status}`);
       const resultsData = await resultsRes.json();
       if (Array.isArray(resultsData)) {
         setResults(resultsData);
       }
 
-      // Check if done (simple logic, backend should probably have a status flag in progress)
-      // For now we assume if backend says "Done" or equivalent, or we can't really know 100% without a dedicated status endpoint vs just progress dict
-      // Let's rely on the logs in progress or just keep polling. 
-      // Actually, if the user stops it or it finishes, we need to know. 
-      // For this v1, we'll keep polling until manual stop or error.
+      if (!progressData.is_active) {
+        if (progressData.download_ready) {
+          setIsScraping(false);
+          setStatus('completed');
+          setMessage(progressData.status || 'Scraping complete.');
+        } else if (progressData.status?.includes('Error')) {
+          setIsScraping(false);
+          setStatus('error');
+          setError(progressData.status);
+        } else if (
+          progressData.target > 0 &&
+          (progressData.status?.includes('Stopped') ||
+            progressData.status?.includes('End of list') ||
+            progressData.status?.includes('No new items') ||
+            progressData.status?.includes('No results'))
+        ) {
+          setIsScraping(false);
+          setStatus('idle');
+          setMessage(progressData.status);
+        }
+      }
 
     } catch (err) {
       // Silent console log for polling errors to avoid spamming user UI
@@ -67,8 +84,8 @@ function App() {
   };
 
   const startScraping = async () => {
-    if (!query || !location) {
-      setError("Please provide both a search term and a location.");
+    if (!query.trim()) {
+      setError("Please provide a business query.");
       return;
     }
 
@@ -81,7 +98,12 @@ function App() {
       const response = await fetch(`${API_URL}/start-scraping`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, location, limit }),
+        body: JSON.stringify({
+          query: query.trim(),
+          location: location.trim(),
+          limit,
+          scraping_mode: scrapingMode,
+        }),
       });
 
       const contentType = response.headers.get("content-type");
@@ -119,8 +141,26 @@ function App() {
     }
   };
 
-  const handleDownload = () => {
-    window.open(`${API_URL}/download`, '_blank');
+  const handleDownload = async () => {
+    try {
+      const response = await fetch(`${API_URL}/download`);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Download failed');
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get('content-disposition') || '';
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const filename = match?.[1] || 'google_maps_data.xlsx';
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   return (
@@ -182,7 +222,7 @@ function App() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium ml-1" style={{ color: 'var(--text-medium)' }}>Location</label>
+                <label className="text-sm font-medium ml-1" style={{ color: 'var(--text-medium)' }}>Location (optional)</label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-medium)' }} />
                   <input
@@ -208,6 +248,36 @@ function App() {
                     className="glass-input w-full pl-10"
                   />
                 </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium ml-1" style={{ color: 'var(--text-medium)' }}>Scraping Mode</label>
+              <div className="space-y-2 ml-1">
+                <label className="flex items-center gap-3 cursor-pointer" style={{ color: 'var(--text-light)' }}>
+                  <input
+                    type="radio"
+                    name="scrapingMode"
+                    value="simple"
+                    checked={scrapingMode === 'simple'}
+                    onChange={(e) => setScrapingMode(e.target.value)}
+                    disabled={isScraping}
+                    className="accent-[var(--primary)]"
+                  />
+                  <span className="text-sm">Simple Scraping</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer" style={{ color: 'var(--text-light)' }}>
+                  <input
+                    type="radio"
+                    name="scrapingMode"
+                    value="detailed"
+                    checked={scrapingMode === 'detailed'}
+                    onChange={(e) => setScrapingMode(e.target.value)}
+                    disabled={isScraping}
+                    className="accent-[var(--primary)]"
+                  />
+                  <span className="text-sm">Detailed Scraping</span>
+                </label>
               </div>
             </div>
 
@@ -258,11 +328,12 @@ function App() {
               <Database className="w-5 h-5" style={{ color: 'var(--accent)' }} />
             </div>
             <p className="text-sm mb-6" style={{ color: 'var(--text-medium)' }}>
-              Download the scraped data in Excel format with organized columns and formatting.
+              Download the scraped data as Excel. The file is generated on demand and not stored on the server.
             </p>
             <button
               onClick={handleDownload}
-              className="w-full btn-secondary group"
+              disabled={!progress.download_ready}
+              className="w-full btn-secondary group disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="w-5 h-5 group-hover:text-blue-400 transition-colors" style={{ color: 'var(--text-light)' }} />
               Download Excel
@@ -285,7 +356,10 @@ function App() {
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-bold font-mono" style={{ color: 'var(--text-light)' }}>
-                      {results.length}
+                      {progress.count ?? 0}
+                      {progress.target > 0 && (
+                        <span className="text-base font-normal" style={{ color: 'var(--text-medium)' }}> / {progress.target}</span>
+                      )}
                     </div>
                     <div className="text-xs" style={{ color: 'var(--text-medium)' }}>records found</div>
                   </div>

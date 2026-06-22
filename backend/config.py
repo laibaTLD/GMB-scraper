@@ -1,10 +1,19 @@
 import os
 
+# API Settings
+API_PORT = int(os.environ.get('API_PORT', 5000))
+API_HOST = os.environ.get('API_HOST', '0.0.0.0')
+
 # Scraper Settings
 TARGET_COUNT = 1000
-MIN_DELAY = 2
-MAX_DELAY = 5
-SCROLL_PAUSE_TIME = 2
+MIN_DELAY = 0.2
+MAX_DELAY = 0.5
+SCROLL_PAUSE_TIME = 0.6
+PLACE_WAIT_TIMEOUT = 8
+WEBSITE_FETCH_TIMEOUT = 5
+RECOVERY_SAVE_INTERVAL = 10
+MAX_SCROLL_RETRIES = 15
+CONCURRENT_WORKERS = 3
 MAX_RETRIES = 3
 
 # User Agents for Rotation
@@ -17,8 +26,7 @@ USER_AGENTS = [
 ]
 
 # Chrome Options
-HEADLESS_MODE = False  # Set to True for hidden scraping, False to see existing browser
-# Note: Google Maps often detects headless mode easily. Keeping it visible is often safer for complex interactions.
+HEADLESS_MODE = True
 
 # Output Directory
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'downloads')

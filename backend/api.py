@@ -1,7 +1,9 @@
+from io import BytesIO
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from scraper import scraper_instance
-import os
+from excel_handler import generate_excel_bytes
+from config import API_PORT, API_HOST
 
 app = Flask(__name__)
 CORS(app)
@@ -18,18 +20,20 @@ def reset_scraper():
     scraper_instance.results = []
     scraper_instance.scraped_count = 0
     scraper_instance.target_count = 0
-    scraper_instance.output_file = None
     return jsonify({"message": "Scraper reset successfully"}), 200
 
 @app.route('/start-scraping', methods=['POST'])
 def start_scraping():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     query = data.get('query')
     location = data.get('location')
     limit = data.get('limit', 1000)
+    scraping_mode = data.get('scraping_mode', 'detailed')
+    if scraping_mode not in ('simple', 'detailed'):
+        scraping_mode = 'detailed'
     
-    if not query or not location:
-        return jsonify({"error": "Missing query or location"}), 400
+    if not query:
+        return jsonify({"error": "Missing business query"}), 400
         
     try:
         limit = int(limit)
@@ -38,7 +42,7 @@ def start_scraping():
     except ValueError:
         limit = 1000
         
-    success, message = scraper_instance.start_scraping(query, location, limit)
+    success, message = scraper_instance.start_scraping(query, location, limit, scraping_mode)
     if success:
         return jsonify({"message": message}), 200
     else:
@@ -62,12 +66,20 @@ def get_results():
 
 @app.route('/download', methods=['GET'])
 def download_file():
-    filepath = scraper_instance.get_download_path()
-    if filepath and os.path.exists(filepath):
-        return send_file(filepath, as_attachment=True)
-    else:
-        return jsonify({"error": "File not ready"}), 404
+    if not scraper_instance.results:
+        return jsonify({"error": "No data available to download"}), 404
+
+    excel_bytes, filename = generate_excel_bytes(scraper_instance.results)
+    if not excel_bytes:
+        return jsonify({"error": "Failed to generate file"}), 500
+
+    return send_file(
+        BytesIO(excel_bytes),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
 
 if __name__ == '__main__':
-    print("Starting GMB Scraper API on port 5001...")
-    app.run(host='0.0.0.0', port=5001)
+    print(f"Starting GMB Scraper API on port {API_PORT}...")
+    app.run(host=API_HOST, port=API_PORT)
