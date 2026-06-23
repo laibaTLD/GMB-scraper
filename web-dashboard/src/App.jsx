@@ -14,7 +14,9 @@ import {
   Target,
   TrendingUp,
   Square,
+  Table2,
 } from 'lucide-react';
+import ResultsPreview from './components/ResultsPreview';
 
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:5000');
 const STORAGE_KEY = 'lead-engine-session';
@@ -75,6 +77,7 @@ function App() {
     initialSession?.progress ?? { count: 0, target: 0, status: '', is_active: false, download_ready: false }
   );
   const [error, setError] = useState(null);
+  const [resultsView, setResultsView] = useState('summary');
   const pollingRef = useRef(null);
 
   useEffect(() => {
@@ -483,20 +486,45 @@ function App() {
           {/* CRM results table — fills remaining height */}
           <div className="surface-card flex flex-col flex-1 min-h-0 overflow-hidden">
             <div
-              className="flex items-center justify-between px-3 shrink-0"
+              className="flex items-center justify-between px-3 shrink-0 gap-2"
               style={{ height: 36, borderBottom: '1px solid var(--border)' }}
             >
               <h3 className="section-heading">
                 <CheckCircle2 className="w-3.5 h-3.5 text-[var(--primary)]" />
-                Live Results
+                {resultsView === 'summary' ? 'Live Results' : 'Full Preview'}
               </h3>
-              <span className="text-[10px] px-2 py-0.5 rounded-md text-[var(--text-muted)] bg-[var(--surface-elevated)]">
-                Latest 50
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="view-toggle" role="tablist" aria-label="Results view">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={resultsView === 'summary'}
+                    className={`view-toggle-btn ${resultsView === 'summary' ? 'view-toggle-btn-active' : ''}`}
+                    onClick={() => setResultsView('summary')}
+                  >
+                    Summary
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={resultsView === 'full'}
+                    className={`view-toggle-btn ${resultsView === 'full' ? 'view-toggle-btn-active' : ''}`}
+                    onClick={() => setResultsView('full')}
+                  >
+                    <Table2 className="w-3 h-3 inline -mt-px mr-0.5" />
+                    Full
+                  </button>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-md text-[var(--text-muted)] bg-[var(--surface-elevated)]">
+                  {resultsView === 'summary' ? 'Latest 50' : `${allResults.length} records`}
+                </span>
+              </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
-              {results.length === 0 ? (
+              {resultsView === 'full' ? (
+                <ResultsPreview data={allResults} />
+              ) : results.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center gap-2 text-[var(--text-muted)]">
                   <Search className="w-6 h-6 opacity-20" />
                   <p className="text-[12px]">No results yet — configure and start scraping.</p>

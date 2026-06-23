@@ -310,6 +310,71 @@ body {
     background: rgba(255, 255, 255, 0.02);
   }
 
+  .preview-table th {
+    @apply px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-left whitespace-nowrap;
+    color: var(--text-muted);
+    background: var(--surface-elevated);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .preview-table td {
+    @apply px-3 py-2 text-[12px] align-top;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  .preview-table tbody tr {
+    transition: background 0.15s;
+  }
+
+  .preview-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .preview-table-index {
+    @apply px-2 py-2 text-[10px] font-medium text-center sticky left-0 z-[1];
+    min-width: 36px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  .preview-table thead .preview-table-index {
+    background: var(--surface-elevated);
+    z-index: 11;
+  }
+
+  .preview-link {
+    @apply inline-flex items-center gap-1 max-w-[220px] transition-colors;
+    color: var(--primary);
+  }
+
+  .preview-link:hover {
+    color: var(--primary-end);
+    text-decoration: underline;
+  }
+
+  .view-toggle {
+    @apply flex p-0.5 rounded-lg gap-0.5;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+  }
+
+  .view-toggle-btn {
+    @apply px-2.5 py-1 text-[10px] font-medium rounded-md transition-all;
+    color: var(--text-muted);
+  }
+
+  .view-toggle-btn:hover {
+    color: var(--text);
+  }
+
+  .view-toggle-btn-active {
+    color: var(--text);
+    background: rgba(225, 72, 75, 0.15);
+    box-shadow: 0 0 0 1px rgba(225, 72, 75, 0.25);
+  }
+
   .progress-slim {
     @apply flex-1 h-1 rounded-full overflow-hidden min-w-[80px];
     background: var(--surface-elevated);
