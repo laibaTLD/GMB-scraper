@@ -17,6 +17,41 @@ import {
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:5000');
+const STORAGE_KEY = 'lead-engine-session';
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(data) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (err) {
+    console.warn('Failed to save session:', err.message);
+  }
+}
+
+function getDownloadUrl() {
+  return API_URL ? `${API_URL}/download` : '/download';
+}
+
+function isSameOriginDownload() {
+  const url = getDownloadUrl();
+  if (url.startsWith('/')) return true;
+  try {
+    return new URL(url).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+const initialSession = loadSession();
 
 const STATUS_CHIPS = [
   { key: 'idle', label: 'Ready' },
@@ -28,17 +63,51 @@ const STATUS_CHIPS = [
 const hasValue = (v) => v && v !== 'N/A';
 
 function App() {
-  const [query, setQuery] = useState('');
-  const [location, setLocation] = useState('');
-  const [limit, setLimit] = useState(50);
-  const [scrapingMode, setScrapingMode] = useState('detailed');
+  const [query, setQuery] = useState(initialSession?.query ?? '');
+  const [location, setLocation] = useState(initialSession?.location ?? '');
+  const [limit, setLimit] = useState(initialSession?.limit ?? 50);
+  const [scrapingMode, setScrapingMode] = useState(initialSession?.scrapingMode ?? 'detailed');
   const [isScraping, setIsScraping] = useState(false);
-  const [status, setStatus] = useState('idle');
-  const [results, setResults] = useState([]);
-  const [allResults, setAllResults] = useState([]);
-  const [progress, setProgress] = useState({ count: 0, target: 0, status: '', is_active: false, download_ready: false });
+  const [status, setStatus] = useState(initialSession?.status ?? 'idle');
+  const [results, setResults] = useState((initialSession?.allResults ?? []).slice(0, 50));
+  const [allResults, setAllResults] = useState(initialSession?.allResults ?? []);
+  const [progress, setProgress] = useState(
+    initialSession?.progress ?? { count: 0, target: 0, status: '', is_active: false, download_ready: false }
+  );
   const [error, setError] = useState(null);
   const pollingRef = useRef(null);
+
+  useEffect(() => {
+    saveSession({ query, location, limit, scrapingMode, status, allResults, progress });
+  }, [query, location, limit, scrapingMode, status, allResults, progress]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const progressRes = await fetch(`${API_URL}/progress`);
+        if (!progressRes.ok) return;
+        const progressData = await progressRes.json();
+        setProgress(progressData);
+
+        if (progressData.is_active) {
+          setIsScraping(true);
+          setStatus('scraping');
+        } else if (progressData.download_ready) {
+          setStatus('completed');
+        }
+
+        const resultsRes = await fetch(`${API_URL}/results?limit=1000`);
+        if (!resultsRes.ok) return;
+        const resultsData = await resultsRes.json();
+        if (Array.isArray(resultsData) && resultsData.length > 0) {
+          setAllResults(resultsData);
+          setResults(resultsData.slice(0, 50));
+        }
+      } catch (err) {
+        console.warn('Backend sync failed:', err.message);
+      }
+    })();
+  }, []);
 
   const isActive = status === 'scraping';
   const progressPercent = progress.target > 0
@@ -164,20 +233,36 @@ function App() {
 
   const handleDownload = async () => {
     try {
-      const response = await fetch(`${API_URL}/download`);
+      const downloadUrl = getDownloadUrl();
+
+      if (isSameOriginDownload()) {
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+
+      const response = await fetch(downloadUrl);
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Download failed');
       }
-      const blob = await response.blob();
       const disposition = response.headers.get('content-disposition') || '';
-      const match = disposition.match(/filename="?([^"]+)"?/);
+      const match = disposition.match(/filename="?([^";]+)"?/);
       const filename = match?.[1] || 'google_maps_data.xlsx';
+      const buffer = await response.arrayBuffer();
+      const blob = new Blob([buffer], { type: XLSX_MIME });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = filename;
+      link.style.display = 'none';
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (err) {
       setError(err.message);

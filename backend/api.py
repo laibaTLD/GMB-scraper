@@ -84,12 +84,16 @@ def download_file():
     if not excel_bytes:
         return jsonify({"error": "Failed to generate file"}), 500
 
-    return send_file(
+    response = send_file(
         BytesIO(excel_bytes),
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         as_attachment=True,
-        download_name=filename
+        download_name=filename,
     )
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Content-Length'] = str(len(excel_bytes))
+    return response
 
 
 if SERVE_FRONTEND:
