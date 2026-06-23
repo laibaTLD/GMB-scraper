@@ -16,7 +16,7 @@ import {
   Square,
 } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:5000');
 
 const STATUS_CHIPS = [
   { key: 'idle', label: 'Ready' },

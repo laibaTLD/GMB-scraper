@@ -1,5 +1,6 @@
 from io import BytesIO
-from flask import Flask, request, jsonify, send_file
+import os
+from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 from scraper import scraper_instance
 from excel_handler import generate_excel_bytes
@@ -8,9 +9,19 @@ from config import API_PORT, API_HOST
 app = Flask(__name__)
 CORS(app)
 
-@app.route('/', methods=['GET'])
+STATIC_DIR = os.environ.get('STATIC_DIR')
+SERVE_FRONTEND = STATIC_DIR and os.path.isdir(STATIC_DIR)
+
+
+@app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "running", "message": "Lead Engine API is active"}), 200
+
+
+if not SERVE_FRONTEND:
+    @app.route('/', methods=['GET'])
+    def root_health_check():
+        return health_check()
 
 @app.route('/reset-scraper', methods=['POST'])
 def reset_scraper():
@@ -79,6 +90,16 @@ def download_file():
         as_attachment=True,
         download_name=filename
     )
+
+
+if SERVE_FRONTEND:
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def serve_frontend(path):
+        file_path = os.path.join(STATIC_DIR, path)
+        if path and os.path.isfile(file_path):
+            return send_from_directory(STATIC_DIR, path)
+        return send_from_directory(STATIC_DIR, 'index.html')
 
 if __name__ == '__main__':
     print(f"Starting Lead Engine API on port {API_PORT}...")
