@@ -5,7 +5,7 @@ API_PORT = int(os.environ.get('API_PORT', 5000))
 API_HOST = os.environ.get('API_HOST', '0.0.0.0')
 
 # Scraper Settings
-TARGET_COUNT = 1000
+TARGET_COUNT = 150
 MIN_DELAY = 0.2
 MAX_DELAY = 0.5
 SCROLL_PAUSE_TIME = 0.6

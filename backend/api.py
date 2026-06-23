@@ -38,7 +38,7 @@ def start_scraping():
     data = request.get_json(silent=True) or {}
     query = data.get('query')
     location = data.get('location')
-    limit = data.get('limit', 1000)
+    limit = data.get('limit', 50)
     scraping_mode = data.get('scraping_mode', 'detailed')
     if scraping_mode not in ('simple', 'detailed'):
         scraping_mode = 'detailed'
@@ -48,10 +48,10 @@ def start_scraping():
         
     try:
         limit = int(limit)
-        if limit < 20: limit = 20
-        if limit > 1000: limit = 1000
+        if limit < 1: limit = 1
+        if limit > 150: limit = 150
     except ValueError:
-        limit = 1000
+        limit = 50
         
     success, message = scraper_instance.start_scraping(query, location, limit, scraping_mode)
     if success:

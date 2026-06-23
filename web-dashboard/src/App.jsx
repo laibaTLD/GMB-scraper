@@ -30,7 +30,7 @@ const hasValue = (v) => v && v !== 'N/A';
 function App() {
   const [query, setQuery] = useState('');
   const [location, setLocation] = useState('');
-  const [limit, setLimit] = useState(1000);
+  const [limit, setLimit] = useState(50);
   const [scrapingMode, setScrapingMode] = useState('detailed');
   const [isScraping, setIsScraping] = useState(false);
   const [status, setStatus] = useState('idle');
@@ -108,6 +108,10 @@ function App() {
   const startScraping = async () => {
     if (!query.trim()) {
       setError('Please provide a business query.');
+      return;
+    }
+    if (limit < 1 || limit > 150) {
+      setError('Max Leads must be between 1 and 150.');
       return;
     }
 
@@ -259,8 +263,8 @@ function App() {
                   <input
                     id="limit"
                     type="number"
-                    min="20"
-                    max="1000"
+                    min="1"
+                    max="150"
                     value={limit}
                     onChange={(e) => setLimit(Number(e.target.value))}
                     className="input-compact"
@@ -268,7 +272,7 @@ function App() {
                     aria-describedby="limit-hint"
                   />
                 </div>
-                <span id="limit-hint" className="sr-only">Between 20 and 1000</span>
+                <span id="limit-hint" className="sr-only">Between 1 and 150</span>
               </div>
             </div>
 
